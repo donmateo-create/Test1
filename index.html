@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lusterko z kamerki</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: white;
+      font-family: sans-serif;
+    }
+    video {
+      transform: scaleX(-1); /* efekt lusterka */
+      width: 100%;
+      height: auto;
+      max-width: 600px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(255,255,255,0.3);
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h2>📸 Lusterko z kamerki</h2>
+  <video id="kamera" autoplay playsinline></video>
+  <button id="przelacz">Zmień kamerę</button>
+
+  <script>
+    const video = document.getElementById('kamera');
+    const btn = document.getElementById('przelacz');
+    let aktualnyTryb = 'user'; // 'user' = przednia kamera, 'environment' = tylna
+
+    async function uruchomKamerke() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: aktualnyTryb },
+          audio: false
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        alert('Nie można uzyskać dostępu do kamerki: ' + err.message);
+      }
+    }
+
+    btn.addEventListener('click', async () => {
+      // zatrzymaj aktualny stream
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+      }
+      // zmień kamerę
+      aktualnyTryb = aktualnyTryb === 'user' ? 'environment' : 'user';
+      await uruchomKamerke();
+    });
+
+    // uruchom przy starcie
+    uruchomKamerke();
+  </script>
+</body>
+</html>
