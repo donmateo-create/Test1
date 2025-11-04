@@ -1,96 +1,221 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Odczyt NFC</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Odczyt NFC - legitymacja studencka</title>
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background: #000;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      color: white;
-      font-family: sans-serif;
-      text-align: center;
+    :root{
+      --bg:#0b0b0b;
+      --panel: rgba(255,255,255,0.04);
+      --accent:#0b84ff;
+      --text:#e6e6e6;
     }
-    button {
-      margin-top: 15px;
-      padding: 10px 20px;
-      font-size: 16px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      background-color: #007bff;
-      color: white;
+    html,body{
+      height:100%;
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      box-sizing:border-box;
     }
-    button:hover {
-      background-color: #0056b3;
+    .card{
+      width:100%;
+      max-width:720px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+      border-radius:12px;
+      padding:22px;
+      box-shadow:0 6px 30px rgba(0,0,0,0.6);
+      box-sizing:border-box;
     }
-    #wynik {
-      margin-top: 20px;
-      max-width: 90%;
-      background: rgba(255, 255, 255, 0.1);
-      padding: 15px;
-      border-radius: 10px;
-      word-break: break-word;
+    h1{ margin:0 0 8px 0; font-size:20px; }
+    p.small{ margin:0 0 14px 0; color: #bdbdbd; font-size:13px; }
+    .controls{ display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+    button{
+      appearance:none;
+      border:0;
+      background:var(--accent);
+      color:white;
+      padding:10px 14px;
+      border-radius:8px;
+      cursor:pointer;
+      font-weight:600;
     }
+    button.secondary{
+      background:transparent;
+      border:1px solid rgba(255,255,255,0.08);
+      color:var(--text);
+    }
+    #log{
+      white-space:pre-wrap;
+      word-break:break-word;
+      background:var(--panel);
+      padding:12px;
+      border-radius:8px;
+      max-height:320px;
+      overflow:auto;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;
+      font-size:13px;
+      color:#e8eef8;
+    }
+    .note{ margin-top:12px; font-size:13px; color:#cfcfcf; }
+    .warn{ color:#ffb86b; }
   </style>
 </head>
 <body>
-  <h2>📶 Odczyt NFC</h2>
-  <p>Dotknij tagu NFC do telefonu po naciśnięciu przycisku.</p>
-  <button id="startNFC">Rozpocznij skanowanie</button>
+  <div class="card">
+    <h1>Odczyt NFC - legitymacja studencka</h1>
+    <p class="small">Kliknij "Start" i przyłóż legitymację do telefonu. Strona próbuje odczytać NDEF i pokaże surowe dane (HEX/tekst). Jeśli karta nie jest NDEF, Web NFC może nie zadziałać.</p>
 
-  <div id="wynik">Brak danych</div>
+    <div class="controls">
+      <button id="startBtn">Start</button>
+      <button id="stopBtn" class="secondary">Stop</button>
+      <button id="clearBtn" class="secondary">Wyczyść</button>
+    </div>
+
+    <div id="log">Brak odczytów.</div>
+
+    <div class="note">
+      Uwaga: Web NFC działa głównie w Chrome na Androidzie. Wiele legitymacji studenckich używa formatów niskopoziomowych (IsoDep/MIFARE DESFire) i w takim przypadku konieczna jest natywna aplikacja Android z dostępem do IsoDep/APDU.
+    </div>
+  </div>
 
   <script>
-    const startBtn = document.getElementById('startNFC');
-    const wynikDiv = document.getElementById('wynik');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const log = document.getElementById('log');
 
-    async function uruchomNFC() {
-      if ('NDEFReader' in window) {
-        try {
-          const ndef = new NDEFReader();
-          await ndef.scan();
-          wynikDiv.textContent = "Czekam na tag NFC...";
+    let ndefReader = null;
 
-          ndef.onreading = event => {
-            const { message, serialNumber } = event;
-            let output = `🔹 UID tagu: ${serialNumber}\n`;
+    function appendLog(txt){
+      const now = new Date().toLocaleTimeString();
+      log.textContent = `[${now}] ${txt}\n\n` + log.textContent;
+    }
 
-            for (const record of message.records) {
-              output += `\n📄 Typ: ${record.recordType}`;
+    function toHex(buffer) {
+      const bytes = new Uint8Array(buffer);
+      return Array.from(bytes, b => b.toString(16).padStart(2,'0')).join(' ');
+    }
 
-              // Odczyt danych jako tekst (jeśli dostępne)
-              if (record.recordType === "text") {
-                const textDecoder = new TextDecoder(record.encoding || "utf-8");
-                output += `\n📝 Dane: ${textDecoder.decode(record.data)}`;
-              } 
-              else if (record.recordType === "url") {
-                const textDecoder = new TextDecoder();
-                output += `\n🔗 URL: ${textDecoder.decode(record.data)}`;
-              } 
-              else {
-                output += `\n📦 Surowe dane: ${JSON.stringify(record.data)}`;
-              }
-            }
+    function tryDecodeText(record){
+      try {
+        // record.data może być DataView albo Uint8Array - w WebNFC spec record.data jest a DOMString? we handle DataView
+        const raw = record.data;
+        let bytes;
+        if (raw instanceof ArrayBuffer) bytes = new Uint8Array(raw);
+        else if (ArrayBuffer.isView(raw)) bytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+        else return null;
 
-            wynikDiv.textContent = output;
-          };
-        } catch (error) {
-          wynikDiv.textContent = "❌ Błąd: " + error.message;
-        }
-      } else {
-        wynikDiv.textContent = "⚠️ Twoja przeglądarka nie obsługuje Web NFC.\nUżyj Chrome na Androidzie.";
+        // UTF-8 text decode
+        const decoder = new TextDecoder('utf-8');
+        return decoder.decode(bytes);
+      } catch(e){
+        return null;
       }
     }
 
-    startBtn.addEventListener('click', uruchomNFC);
+    async function startScan(){
+      if (!('NDEFReader' in window)) {
+        appendLog('Twoja przeglądarka nie obsługuje Web NFC. Użyj Chrome na Androidzie.');
+        return;
+      }
+
+      try {
+        ndefReader = new NDEFReader();
+        await ndefReader.scan();
+        appendLog('Skanowanie rozpoczęte. Przyłóż kartę.');
+
+        ndefReader.onreadingerror = () => {
+          appendLog('Błąd podczas czytania tagu.');
+        };
+
+        ndefReader.onreading = evt => {
+          // Web NFC daje event.message.records
+          const serial = evt.serialNumber || 'brak';
+          appendLog('Tag wykryty. UID: ' + serial);
+          const records = evt.message.records;
+          if (!records || records.length === 0) {
+            appendLog('Brak rekordów NDEF. Karta prawdopodobnie nie używa NDEF.');
+            return;
+          }
+
+          for (let i=0;i<records.length;i++){
+            const r = records[i];
+            const parts = [];
+            parts.push(`record ${i+1}: type=${r.recordType}, mediaType=${r.mediaType || 'brak'}`);
+
+            // Spróbuj odczytać jako tekst (jeśli recordType jest 'text' albo mediaType wskazuje)
+            let text = null;
+            try {
+              // W niektórych implementacjach record.data jest ArrayBuffer
+              if (r.recordType === 'text') {
+                // spec: text record ma status byte w pierwszym bajcie - ale Web NFC może już zwrócić decoded text -> use tryDecodeText
+                text = tryDecodeText(r);
+              } else if (r.recordType === 'url' || (r.mediaType && r.mediaType.includes('text'))) {
+                text = tryDecodeText(r);
+              } else {
+                // general attempt
+                text = tryDecodeText(r);
+              }
+            } catch(e) {
+              text = null;
+            }
+
+            if (text) {
+              parts.push('tekst: ' + text);
+            }
+
+            // pokaż surowe dane
+            try {
+              const raw = r.data;
+              if (raw) {
+                let ab;
+                if (raw instanceof ArrayBuffer) ab = raw;
+                else if (ArrayBuffer.isView(raw)) ab = raw.buffer;
+                else ab = null;
+
+                if (ab) {
+                  parts.push('HEX: ' + toHex(ab));
+                }
+              }
+            } catch(e){
+              // ignore
+            }
+
+            appendLog(parts.join(' | '));
+          }
+        };
+      } catch (err) {
+        appendLog('Błąd inicjalizacji skanowania: ' + err.message);
+      }
+    }
+
+    function stopScan(){
+      if (ndefReader) {
+        try {
+          // nie ma oficjalnego stop() w niektórych implementacjach; workaround: assign null handlers i pozwól GC
+          ndefReader.onreading = null;
+          ndefReader.onreadingerror = null;
+          // niektóre przeglądarki mają ndefReader.abort() jeśli użyto controller - ale nie zawsze
+          appendLog('Skanowanie zatrzymane.');
+        } catch(e){
+          appendLog('Błąd zatrzymania: ' + e.message);
+        }
+        ndefReader = null;
+      } else {
+        appendLog('Skanowanie nie było aktywne.');
+      }
+    }
+
+    startBtn.addEventListener('click', startScan);
+    stopBtn.addEventListener('click', stopScan);
+    clearBtn.addEventListener('click', () => { log.textContent = 'Brak odczytów.'; });
+
   </script>
 </body>
 </html>
