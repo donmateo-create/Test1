@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lusterko z kamerki</title>
+  <title>Odczyt NFC</title>
   <style>
     body {
       margin: 0;
@@ -16,14 +16,7 @@
       height: 100vh;
       color: white;
       font-family: sans-serif;
-    }
-    video {
-      transform: scaleX(-1); /* efekt lusterka */
-      width: 100%;
-      height: auto;
-      max-width: 600px;
-      border-radius: 10px;
-      box-shadow: 0 0 20px rgba(255,255,255,0.3);
+      text-align: center;
     }
     button {
       margin-top: 15px;
@@ -38,42 +31,66 @@
     button:hover {
       background-color: #0056b3;
     }
+    #wynik {
+      margin-top: 20px;
+      max-width: 90%;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 15px;
+      border-radius: 10px;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
-  <h2>📸 Lusterko z kamerki</h2>
-  <video id="kamera" autoplay playsinline></video>
-  <button id="przelacz">Zmień kamerę</button>
+  <h2>📶 Odczyt NFC</h2>
+  <p>Dotknij tagu NFC do telefonu po naciśnięciu przycisku.</p>
+  <button id="startNFC">Rozpocznij skanowanie</button>
+
+  <div id="wynik">Brak danych</div>
 
   <script>
-    const video = document.getElementById('kamera');
-    const btn = document.getElementById('przelacz');
-    let aktualnyTryb = 'user'; // 'user' = przednia kamera, 'environment' = tylna
+    const startBtn = document.getElementById('startNFC');
+    const wynikDiv = document.getElementById('wynik');
 
-    async function uruchomKamerke() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: aktualnyTryb },
-          audio: false
-        });
-        video.srcObject = stream;
-      } catch (err) {
-        alert('Nie można uzyskać dostępu do kamerki: ' + err.message);
+    async function uruchomNFC() {
+      if ('NDEFReader' in window) {
+        try {
+          const ndef = new NDEFReader();
+          await ndef.scan();
+          wynikDiv.textContent = "Czekam na tag NFC...";
+
+          ndef.onreading = event => {
+            const { message, serialNumber } = event;
+            let output = `🔹 UID tagu: ${serialNumber}\n`;
+
+            for (const record of message.records) {
+              output += `\n📄 Typ: ${record.recordType}`;
+
+              // Odczyt danych jako tekst (jeśli dostępne)
+              if (record.recordType === "text") {
+                const textDecoder = new TextDecoder(record.encoding || "utf-8");
+                output += `\n📝 Dane: ${textDecoder.decode(record.data)}`;
+              } 
+              else if (record.recordType === "url") {
+                const textDecoder = new TextDecoder();
+                output += `\n🔗 URL: ${textDecoder.decode(record.data)}`;
+              } 
+              else {
+                output += `\n📦 Surowe dane: ${JSON.stringify(record.data)}`;
+              }
+            }
+
+            wynikDiv.textContent = output;
+          };
+        } catch (error) {
+          wynikDiv.textContent = "❌ Błąd: " + error.message;
+        }
+      } else {
+        wynikDiv.textContent = "⚠️ Twoja przeglądarka nie obsługuje Web NFC.\nUżyj Chrome na Androidzie.";
       }
     }
 
-    btn.addEventListener('click', async () => {
-      // zatrzymaj aktualny stream
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => track.stop());
-      }
-      // zmień kamerę
-      aktualnyTryb = aktualnyTryb === 'user' ? 'environment' : 'user';
-      await uruchomKamerke();
-    });
-
-    // uruchom przy starcie
-    uruchomKamerke();
+    startBtn.addEventListener('click', uruchomNFC);
   </script>
 </body>
 </html>
